@@ -1,14 +1,70 @@
 const User = require("../model/user.model");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const SALT = bcrypt.genSaltSync(10);
 
 exports.store = async (req, res) => {
   try {
+    const { email, password } = req.body;
+    const findUser = await User.findOne({ email });
+    if (findUser) {
+      return res.json({
+        message: "Email Already exists",
+        status: 403,
+        success: false,
+      });
+    }
+    const hashPassword = await bcrypt.hash(password, SALT);
+    req.body.password = hashPassword;
     const user = await User.create(req.body);
+    const token = await jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "7d",
+    });
     return res.json({
       status: 200,
       success: true,
       message: "User Created Successfully",
       user,
+      token,
     });
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const findUser = await User.findOne({ email });
+    if (!findUser) {
+      return res.json({
+        message: "Invalid Credentials",
+        status: 403,
+        success: false,
+      });
+    }
+    const comparePassword = await bcrypt.compare(password, findUser.password);
+    if (comparePassword) {
+      const token = await jwt.sign(
+        { id: findUser._id },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+      return res.json({
+        status: 200,
+        success: true,
+        message: "User login Successfully",
+        token,
+      });
+    } else {
+      return res.json({
+        message: "Password Incorrect",
+        status: 403,
+        success: false,
+      });
+    }
   } catch (err) {
     console.log(err);
   }
@@ -71,11 +127,12 @@ exports.destroy = async (req, res) => {
   }
 };
 
-
 exports.update = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findOneAndUpdate({ _id: id },req.body,{new:true});
+    const user = await User.findOneAndUpdate({ _id: id }, req.body, {
+      new: true,
+    });
     if (!user) {
       return res.json({
         message: "User not found",
@@ -87,7 +144,7 @@ exports.update = async (req, res) => {
       status: 200,
       success: true,
       message: "User Updated Successfully",
-      user
+      user,
     });
   } catch (err) {
     console.log(err);
